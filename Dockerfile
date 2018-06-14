@@ -10,6 +10,10 @@ RUN pip install tqdm moviepy requests pydub
 RUN pip install -r https://raw.githubusercontent.com/Lasagne/Lasagne/master/requirements.txt
 RUN pip install https://github.com/Lasagne/Lasagne/archive/master.zip
 
+# ffmpeg
+RUN add-apt-repository -y ppa:jonathonf/ffmpeg-3
+RUN apt install -y ffmpeg
+
 
 # Run AENet downloads
 
