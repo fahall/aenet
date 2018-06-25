@@ -95,3 +95,6 @@ ENV/
 *.pkl
 tmp
 tmp/*
+
+log.txt
+falures.txt
