@@ -1,23 +1,26 @@
 import cPickle
 import logging
 import ntpath
-import numpy as np
 import os
 import sys
 import tempfile
 
+import numpy as np
+
 import lasagne
 import theano
 from lasagne.layers import Conv2DLayer as ConvLayer
-from lasagne.layers import InputLayer, MaxPool2DLayer, DenseLayer
+from lasagne.layers import DenseLayer, InputLayer, MaxPool2DLayer
 from moviepy.editor import VideoFileClip
+from tqdm import tqdm
 
 from . import htkfio
 
 logger = logging.getLogger('aenet')
 logger.setLevel(logging.INFO)
 lh = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 lh.setFormatter(formatter)
 logger.addHandler(lh)
 
@@ -26,7 +29,8 @@ feat_shape = [3, 200, 50]  # channel, time. frequency
 if 'AENET_DATA_DIR' in os.environ:
     AENET_DATA_DIR = os.environ['AENET_DATA_DIR']
 else:
-    logger.error("Environment variable AENET_DATA_DIR not set. Set to current directory")
+    logger.error(
+        "Environment variable AENET_DATA_DIR not set. Set to current directory")
     AENET_DATA_DIR = './'
 
 
@@ -35,7 +39,7 @@ class AENet:
                  weight_file='%s/model.pkl' % AENET_DATA_DIR,
                  feat_mean=None, feat_std=None,
                  layer='fc6',
-                 BATCH_SIZE = 10,
+                 BATCH_SIZE=10,
                  HTK_ROOT=AENET_DATA_DIR):  # Directory containing HTK files
 
         self.BATCH_SIZE = BATCH_SIZE
@@ -48,7 +52,8 @@ class AENet:
 
         # Compile prediction function
         prediction = lasagne.layers.get_output(net[layer], deterministic=True)
-        self.pred_fn = theano.function([net['input'].input_var], prediction, allow_input_downcast=True)
+        self.pred_fn = theano.function(
+            [net['input'].input_var], prediction, allow_input_downcast=True)
 
         if feat_mean is None:
             self.feat_mean = np.load('%s/gmean.npy' % AENET_DATA_DIR)
@@ -73,19 +78,30 @@ class AENet:
         # A architecture 41 classes
         nonlin = lasagne.nonlinearities.rectify
         net = {}
-        net['input'] = InputLayer((None, feat_shape[0], feat_shape[1], feat_shape[2]))  # channel, time. frequency
+        # channel, time. frequency
+        net['input'] = InputLayer(
+            (None, feat_shape[0], feat_shape[1], feat_shape[2]))
         # ----------- 1st layer group ---------------
-        net['conv1a'] = ConvLayer(net['input'], num_filters=64, filter_size=(3, 3), stride=1, nonlinearity=nonlin)
-        net['conv1b'] = ConvLayer(net['conv1a'], num_filters=64, filter_size=(3, 3), stride=1, nonlinearity=nonlin)
-        net['pool1'] = MaxPool2DLayer(net['conv1b'], pool_size=(1, 2))  # (time, freq)
+        net['conv1a'] = ConvLayer(net['input'], num_filters=64, filter_size=(
+            3, 3), stride=1, nonlinearity=nonlin)
+        net['conv1b'] = ConvLayer(net['conv1a'], num_filters=64, filter_size=(
+            3, 3), stride=1, nonlinearity=nonlin)
+        net['pool1'] = MaxPool2DLayer(
+            net['conv1b'], pool_size=(1, 2))  # (time, freq)
         # ----------- 2nd layer group ---------------
-        net['conv2a'] = ConvLayer(net['pool1'], num_filters=128, filter_size=(3, 3), stride=1, nonlinearity=nonlin)
-        net['conv2b'] = ConvLayer(net['conv2a'], num_filters=128, filter_size=(3, 3), stride=1, nonlinearity=nonlin)
-        net['pool2'] = MaxPool2DLayer(net['conv2b'], pool_size=(2, 2))  # (time, freq)
+        net['conv2a'] = ConvLayer(net['pool1'], num_filters=128, filter_size=(
+            3, 3), stride=1, nonlinearity=nonlin)
+        net['conv2b'] = ConvLayer(net['conv2a'], num_filters=128, filter_size=(
+            3, 3), stride=1, nonlinearity=nonlin)
+        net['pool2'] = MaxPool2DLayer(
+            net['conv2b'], pool_size=(2, 2))  # (time, freq)
         # ----------- fully connected layer group ---------------
-        net['fc5'] = DenseLayer(net['pool2'], num_units=1024, nonlinearity=nonlin)
-        net['fc6'] = DenseLayer(net['fc5'], num_units=1024, nonlinearity=nonlin)
-        net['prob'] = DenseLayer(net['fc6'], num_units=41, nonlinearity=lasagne.nonlinearities.softmax)
+        net['fc5'] = DenseLayer(
+            net['pool2'], num_units=1024, nonlinearity=nonlin)
+        net['fc6'] = DenseLayer(
+            net['fc5'], num_units=1024, nonlinearity=nonlin)
+        net['prob'] = DenseLayer(
+            net['fc6'], num_units=41, nonlinearity=lasagne.nonlinearities.softmax)
 
         return net
 
@@ -108,7 +124,8 @@ class AENet:
             logger.info('Load pretrained weights from %s ...' % model_file)
             model = cPickle.load(f)
         logger.info('Set the weights...')
-        lasagne.layers.set_all_param_values(net, model['param_values'], trainable=True)
+        lasagne.layers.set_all_param_values(
+            net, model['param_values'], trainable=True)
 
     def write_wav(self, video_obj, target_wav_file):
         '''
@@ -124,7 +141,8 @@ class AENet:
         None
 
         '''
-        assert isinstance(video_obj, VideoFileClip), "video needs to be a instance of VideoFileClip"
+        assert isinstance(
+            video_obj, VideoFileClip), "video needs to be a instance of VideoFileClip"
 
         # Write audio stream of video to file in the desired format
         video_obj.audio.write_audiofile(target_wav_file, fps=16000,  # Set fps to 16k
@@ -193,8 +211,10 @@ class AENet:
                 feat = np.vstack((feat, feat[:cpylen]))  # repeat
                 datalen = feat.shape[0]
 
-        feats = self.slice_data_gen(feat, datalen, input_shape[2], shift, input_shape[1] * input_shape[3])
-        feats = feats.reshape([input_shape[0], input_shape[2], input_shape[1], input_shape[3]])
+        feats = self.slice_data_gen(
+            feat, datalen, input_shape[2], shift, input_shape[1] * input_shape[3])
+        feats = feats.reshape(
+            [input_shape[0], input_shape[2], input_shape[1], input_shape[3]])
 
         return np.swapaxes(feats, 1, 2)
 
@@ -213,7 +233,8 @@ class AENet:
 
             for wf in wavfilelist:
                 wf = wf.rstrip()
-                mfb_files.append('%s/%s' % (tmp_dir, ntpath.basename(wf).replace('.wav', '.mfb')))
+                mfb_files.append(
+                    '%s/%s' % (tmp_dir, ntpath.basename(wf).replace('.wav', '.mfb')))
                 f.write(wf + ' ' + mfb_files[-1] + '\n')
 
         # extract mel filter bank output
@@ -221,8 +242,9 @@ class AENet:
         os.remove(tmp_file)
 
         aenet_feat = []
-        for f in mfb_files:
+        for f in tqdm(mfb_files):
             if os.path.exists(f):
+
                 mfb = self.get_feat_sequence(htkfile=f, shift=shift)
 
                 # AENet features
@@ -236,11 +258,13 @@ class AENet:
                 for i in range(n_batch):
                     feat = np.append(feat, self.pred_fn(
                         mfb[rn_batch + i * self.BATCH_SIZE:rn_batch + (i + 1) * self.BATCH_SIZE]),
-                                     axis=0)
+                        axis=0)
 
-                feat = feat / np.tile(np.linalg.norm(feat, axis=1), (feat.shape[1], 1)).T
+                feat = feat / \
+                    np.tile(np.linalg.norm(feat, axis=1), (feat.shape[1], 1)).T
                 aenet_feat.append(feat)
             else:
+                print('File not found:', f)
                 aenet_feat.append(None)
 
             # Delete the file

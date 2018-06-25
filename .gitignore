@@ -96,5 +96,11 @@ ENV/
 tmp
 tmp/*
 
+
 log.txt
 falures.txt
+
+# htk libs
+# cannot distribute w/o permission
+htk
+htk/*
